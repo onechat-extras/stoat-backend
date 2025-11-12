@@ -271,10 +271,18 @@ pub async fn create_database(db: &MongoDb) {
         "createIndexes": "audit_logs",
         "indexes": [
             {
-                "key": "expires_at",
+                "key": {
+                    "expires_at": 1_i32,
+                },
                 "name": "expires_at_ttl",
                 "expireAfterSeconds": 0
-            }
+            },
+            {
+                "key": {
+                    "server": 1_i32,
+                },
+                "name": "audit_log_server"
+            },
         ]
     })
     .await
