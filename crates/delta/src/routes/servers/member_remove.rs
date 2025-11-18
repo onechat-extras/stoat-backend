@@ -1,5 +1,7 @@
 use revolt_database::{
-    AuditLogEntryAction, Database, RemovalIntention, User, util::{permissions::DatabasePermissionQuery, reference::Reference}
+    util::{permissions::DatabasePermissionQuery, reference::Reference},
+    voice::{get_user_voice_channel_in_server, remove_user_from_voice_channel, VoiceClient},
+    AuditLogEntryAction, Database, RemovalIntention, User,
 };
 use revolt_permissions::{calculate_server_permissions, ChannelPermission};
 use revolt_result::{create_error, Result};
@@ -15,6 +17,7 @@ use crate::util::audit_log_reason::AuditLogReason;
 #[delete("/<target>/members/<member>")]
 pub async fn kick(
     db: &State<Database>,
+    voice_client: &State<VoiceClient>,
     user: User,
     reason: AuditLogReason,
     target: Reference<'_>,
@@ -46,9 +49,15 @@ pub async fn kick(
         .remove(db, &server, RemovalIntention::Kick, false)
         .await?;
 
-    AuditLogEntryAction::MemberKick { user: member.id.user.clone() }
-        .insert(db, server.id, reason.0, user.id)
-        .await;
+    AuditLogEntryAction::MemberKick {
+        user: member.id.user.clone(),
+    }
+    .insert(db, server.id.clone(), reason.0, user.id)
+    .await;
+
+    if let Some(channel_id) = get_user_voice_channel_in_server(&target.id, &server.id).await? {
+        remove_user_from_voice_channel(db, voice_client, &channel_id, &target.id).await?;
+    };
 
     Ok(EmptyResponse)
 }

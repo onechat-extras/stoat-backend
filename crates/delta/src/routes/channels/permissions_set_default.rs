@@ -1,5 +1,6 @@
 use revolt_database::{
     util::{permissions::DatabasePermissionQuery, reference::Reference},
+    voice::{sync_voice_permissions, VoiceClient},
     AuditLogEntryAction, Channel, Database, PartialChannel, User,
 };
 use revolt_models::v0::{self, DataDefaultChannelPermissions};
@@ -13,11 +14,12 @@ use crate::util::audit_log_reason::AuditLogReason;
 ///
 /// Sets permissions for the default role in this channel.
 ///
-/// Channel must be a `Group`, `TextChannel` or `VoiceChannel`.
+/// Channel must be a `Group` or `TextChannel`.
 #[openapi(tag = "Channel Permissions")]
 #[put("/<target>/permissions/default", data = "<data>", rank = 1)]
 pub async fn set_default_channel_permissions(
     db: &State<Database>,
+    voice_client: &State<VoiceClient>,
     user: User,
     reason: AuditLogReason,
     target: Reference<'_>,
@@ -53,12 +55,6 @@ pub async fn set_default_channel_permissions(
             server,
             default_permissions,
             ..
-        }
-        | Channel::VoiceChannel {
-            id,
-            server,
-            default_permissions,
-            ..
         } => {
             if let DataDefaultChannelPermissions::Field { permissions: field } = data {
                 permissions
@@ -88,6 +84,13 @@ pub async fn set_default_channel_permissions(
         }
         _ => return Err(create_error!(InvalidOperation)),
     }
+
+    let server = match channel.server() {
+        Some(server_id) => Some(Reference::from_unchecked(server_id).as_server(db).await?),
+        None => None,
+    };
+
+    sync_voice_permissions(db, voice_client, &channel, server.as_ref(), None).await?;
 
     Ok(Json(channel.into()))
 }

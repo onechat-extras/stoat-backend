@@ -1,5 +1,7 @@
 use revolt_database::{
-    AuditLogEntryAction, Database, User, util::{permissions::DatabasePermissionQuery, reference::Reference}
+    util::{permissions::DatabasePermissionQuery, reference::Reference},
+    voice::{sync_voice_permissions, VoiceClient},
+    AuditLogEntryAction, Database, User,
 };
 use revolt_models::v0;
 use revolt_permissions::{calculate_server_permissions, ChannelPermission};
@@ -15,6 +17,7 @@ use crate::util::audit_log_reason::AuditLogReason;
 #[patch("/<target>/roles/ranks", data = "<data>")]
 pub async fn edit_role_ranks(
     db: &State<Database>,
+    voice_client: &State<VoiceClient>,
     user: User,
     reason: AuditLogReason,
     target: Reference<'_>,
@@ -72,9 +75,17 @@ pub async fn edit_role_ranks(
 
     server.set_role_ordering(db, new_order.clone()).await?;
 
-    AuditLogEntryAction::RolesReorder { positions: new_order }
-        .insert(db, server.id.clone(), reason.0, user.id)
-        .await;
+    AuditLogEntryAction::RolesReorder {
+        positions: new_order,
+    }
+    .insert(db, server.id.clone(), reason.0, user.id)
+    .await;
+
+    for channel_id in &server.channels {
+        let channel = Reference::from_unchecked(channel_id).as_channel(db).await?;
+
+        sync_voice_permissions(db, voice_client, &channel, Some(&server), None).await?;
+    }
 
     Ok(Json(server.into()))
 }

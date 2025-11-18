@@ -1,5 +1,6 @@
 use revolt_database::{
     util::{permissions::DatabasePermissionQuery, reference::Reference},
+    voice::{sync_voice_permissions, VoiceClient},
     AuditLogEntryAction, Database, PartialServer, User,
 };
 use revolt_models::v0;
@@ -18,6 +19,7 @@ use crate::util::audit_log_reason::AuditLogReason;
 #[put("/<target>/permissions/default", data = "<data>", rank = 1)]
 pub async fn set_default_server_permissions(
     db: &State<Database>,
+    voice_client: &State<VoiceClient>,
     user: User,
     reason: AuditLogReason,
     target: Reference<'_>,
@@ -55,6 +57,12 @@ pub async fn set_default_server_permissions(
     }
     .insert(db, server.id.clone(), reason.0, user.id)
     .await;
+
+    for channel_id in &server.channels {
+        let channel = Reference::from_unchecked(channel_id).as_channel(db).await?;
+
+        sync_voice_permissions(db, voice_client, &channel, Some(&server), None).await?;
+    }
 
     Ok(Json(server.into()))
 }

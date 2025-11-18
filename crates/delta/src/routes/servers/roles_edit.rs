@@ -1,5 +1,5 @@
 use revolt_database::{
-    AuditLogEntryAction, Database, FieldsRole, PartialRole, User, util::{permissions::DatabasePermissionQuery, reference::Reference}
+    AuditLogEntryAction, Database, FieldsRole, PartialRole, User, util::{permissions::DatabasePermissionQuery, reference::Reference}, voice::{VoiceClient, sync_voice_permissions}
 };
 use revolt_models::v0;
 use revolt_permissions::{calculate_server_permissions, ChannelPermission};
@@ -16,6 +16,7 @@ use crate::util::audit_log_reason::AuditLogReason;
 #[patch("/<target>/roles/<role_id>", data = "<data>", rank = 1)]
 pub async fn edit(
     db: &State<Database>,
+    voice_client: &State<VoiceClient>,
     user: User,
     reason: AuditLogReason,
     target: Reference<'_>,
@@ -58,20 +59,28 @@ pub async fn edit(
             ..Default::default()
         };
 
-        let remove = remove.into_iter().map(Into::into).collect::<Vec<FieldsRole>>();
+        let remove = remove
+            .into_iter()
+            .map(Into::into)
+            .collect::<Vec<FieldsRole>>();
 
-        role.update(
-            db,
-            &server.id,
-            &role_id,
-            partial.clone(),
-            remove.clone(),
-        )
-        .await?;
+        role.update(db, &server.id, &role_id, partial.clone(), remove.clone())
+            .await?;
 
-        AuditLogEntryAction::RoleEdit { role: role_id, remove, partial }
-            .insert(db, server.id, reason.0, user.id)
-            .await;
+        AuditLogEntryAction::RoleEdit {
+            role: role_id.clone(),
+            remove,
+            partial,
+        }
+        .insert(db, server.id.clone(), reason.0, user.id)
+        .await;
+
+        for channel_id in &server.channels {
+            let channel = Reference::from_unchecked(channel_id).as_channel(db).await?;
+
+            sync_voice_permissions(db, voice_client, &channel, Some(&server), Some(&role_id))
+                .await?;
+        }
 
         Ok(Json(role.into()))
     } else {
