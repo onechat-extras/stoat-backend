@@ -21,7 +21,7 @@ pub async fn delete(
     options: v0::OptionsChannelDelete,
 ) -> Result<EmptyResponse> {
     let mut channel = target.as_channel(db).await?;
-    let mut query = DatabasePermissionQuery::new(db, &user).channel(&channel);
+    let mut query = DatabasePermissionQuery::new(db, &user).channel(&channel).hydrate().await;
     let permissions = calculate_channel_permissions(&mut query).await;
 
     permissions.throw_if_lacking_channel_permission(ChannelPermission::ViewChannel)?;

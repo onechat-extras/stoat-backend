@@ -35,7 +35,7 @@ pub async fn create_webhook(
         return Err(create_error!(InvalidOperation));
     }
 
-    let mut query = DatabasePermissionQuery::new(db, &user).channel(&channel);
+    let mut query = DatabasePermissionQuery::new(db, &user).channel(&channel).hydrate().await;
     calculate_channel_permissions(&mut query)
         .await
         .throw_if_lacking_channel_permission(ChannelPermission::ManageWebhooks)?;

@@ -19,7 +19,7 @@ pub async fn call(
     target: Reference,
 ) -> Result<Json<v0::LegacyCreateVoiceUserResponse>> {
     let channel = target.as_channel(db).await?;
-    let mut query = DatabasePermissionQuery::new(db, &user).channel(&channel);
+    let mut query = DatabasePermissionQuery::new(db, &user).channel(&channel).hydrate().await;
     calculate_channel_permissions(&mut query)
         .await
         .throw_if_lacking_channel_permission(ChannelPermission::Connect)?;
