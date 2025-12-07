@@ -40,10 +40,20 @@ pub async fn create(
         }));
     };
 
+    let member_rank = query.get_member_rank();
+    let rank = if let Some(given_rank) = data.rank {
+        if given_rank <= member_rank.unwrap_or(i64::MIN) {
+            return Err(create_error!(NotElevated));
+        }
+
+        given_rank
+    } else {
+        member_rank.unwrap_or(0).saturating_add(1)
+    };
+
     let role = Role {
         name: data.name,
-        // Rank of the new role should be below the lowest role
-        rank: server.roles.len() as i64,
+        rank,
         colour: None,
         hoist: false,
         permissions: Default::default(),
